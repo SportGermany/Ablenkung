@@ -19,11 +19,25 @@ Nach dem Öffnen der GitHub-Pages-URL in Chrome (Desktop oder Android) kann die 
 ## Ordnerstruktur
 
 ```
-index.html          - die komplette App (HTML/CSS/JS in einer Datei)
-manifest.json        - PWA-Manifest (Name, Icons, Startfarben)
-icons/                - App-Icons in verschiedenen Größen
-.nojekyll             - verhindert, dass GitHub Pages die Dateien durch Jekyll verarbeitet
+index.html            - die komplette App (HTML/CSS/JS in einer Datei)
+manifest.json          - PWA-Manifest (Name, Icons, Startfarben)
+sw.js                   - Service Worker (Voraussetzung fuer "App installieren" in Chrome)
+icons/                  - App-Icons in verschiedenen Größen
+.nojekyll               - verhindert, dass GitHub Pages die Dateien durch Jekyll verarbeitet
 ```
+
+## "App installieren" erscheint nicht in Chrome?
+
+Chrome zeigt den Installieren-Button nur, wenn alle Voraussetzungen erfüllt sind:
+- gültiges Manifest mit Icons (192px & 512px) ✓
+- Seite läuft über **HTTPS** (GitHub Pages liefert das automatisch) ✓
+- ein registrierter **Service Worker** mit Fetch-Handler ✓ (Datei `sw.js`)
+
+Falls es trotzdem nicht klappt:
+- Prüfen, ob `sw.js` wirklich mit hochgeladen wurde (im Browser `deine-url/sw.js` direkt aufrufen - sollte Code anzeigen, kein 404)
+- Einmal die Seite neu laden (der Service Worker braucht beim allerersten Besuch einen zweiten Ladevorgang, um die Kontrolle zu übernehmen)
+- Browser-Cache leeren bzw. die Seite mit Umschalt+Neuladen neu laden, falls vorher schon eine ältere Version ohne Service Worker besucht wurde
+- In Chrome unter `chrome://serviceworker-internals` oder den DevTools (Anwendung → Service Worker) nachsehen, ob er als "activated and running" angezeigt wird
 
 ## Hinweise
 

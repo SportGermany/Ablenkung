@@ -1536,6 +1536,14 @@ document.getElementById("genOverlay").addEventListener("click", closeSheet);
 applyTheme();
 renderAblenken();
 
+// Service Worker registrieren (Voraussetzung fuer "App installieren" in Chrome).
+// Auf file:// oder in nicht unterstuetzten Browsern einfach ignorieren.
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
+
 </script>
 </body>
 </html>
