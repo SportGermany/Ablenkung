@@ -4,8 +4,6 @@
 
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <!-- Damit die App alle startbaren Apps sehen kann (Startbildschirm und Suche) -->
     <queries>
@@ -76,18 +74,5 @@
                 android:resource="@xml/guard_service" />
         </service>
 
-        <!-- Löschschutz (Geräteadministrator) -->
-        <receiver
-            android:name=".AdminReceiver"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin" />
-            <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
-            </intent-filter>
-        </receiver>
     </application>
 </manifest>

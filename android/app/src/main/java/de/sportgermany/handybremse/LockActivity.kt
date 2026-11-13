@@ -1,6 +1,5 @@
 package de.sportgermany.handybremse
 
-import android.app.admin.DevicePolicyManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -52,14 +51,13 @@ class LockActivity : ComponentActivity() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
         }
 
-        /** Schaltet den Löschschutz ab und öffnet die Android-Deinstallation. */
+        /** Öffnet die App-Info der Handybremse, dort auf „Deinstallieren“ tippen (der Wächter lässt es dann zu). */
         fun startUninstall(context: Context) {
-            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            if (Apps.isAdminActive(context)) dpm.removeActiveAdmin(Apps.adminComponent(context))
+            Toast.makeText(context, "Tippe jetzt auf „Deinstallieren“.", Toast.LENGTH_LONG).show()
             Handler(Looper.getMainLooper()).postDelayed({
-                context.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:${context.packageName}"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }, 1200)
+                context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }, 600)
         }
     }
 
@@ -157,7 +155,7 @@ class LockActivity : ComponentActivity() {
 
             ActionCard(
                 title = "Handybremse entfernen",
-                hint = "Schaltet den Löschschutz ab und öffnet die Deinstallation.",
+                hint = "Gibt die Deinstallation für ${Store.UNINSTALL_MINUTES} Minuten frei und öffnet die App-Info.",
                 action = Codes.UNINSTALL,
                 store = store,
                 enabled = !locked,

@@ -47,8 +47,12 @@ class GuardService : AccessibilityService() {
         private val DANGER_EXACT = setOf("ein", "aus", "on", "off")
     }
 
+    private var graceUntil = 0L
+    private fun now() = System.currentTimeMillis()
+
     override fun onServiceConnected() {
         store = Store(this)
+        if (store.firstGuardStart()) graceUntil = now() + 30_000
         handler.removeCallbacks(ticker)
         handler.post(ticker)
     }
@@ -84,7 +88,7 @@ class GuardService : AccessibilityService() {
     }
 
     private fun checkProtectedPage() {
-        if (!Apps.isAdminActive(this)) return      // Schutz erst aktiv, wenn die Einrichtung fertig ist
+        if (now() < graceUntil) return              // kurz nach dem allerersten Einschalten: Einrichtung abschließen lassen
         if (store.uninstallUnlocked()) return       // mit Code freigeschaltet
         val now = System.currentTimeMillis()
         if (now - lastSettingsCheck < 300) return

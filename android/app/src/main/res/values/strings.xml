@@ -2,5 +2,4 @@
 <resources>
     <string name="app_name">Handybremse</string>
     <string name="guard_description">Der Wächter der Handybremse merkt, wenn du TikTok, Instagram oder eine andere gebremste App öffnest, und zeigt dir vorher die Pause. Er liest keine Inhalte mit und schickt nichts ins Internet.</string>
-    <string name="admin_description">Löschschutz: Die Handybremse lässt sich nur mit einem Freischalt-Code oder dem Notfall-Code entfernen.</string>
 </resources>

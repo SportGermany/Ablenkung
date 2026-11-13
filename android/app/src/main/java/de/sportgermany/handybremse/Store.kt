@@ -120,6 +120,13 @@ class Store(context: Context) {
     fun unlockUninstall(minutes: Int = UNINSTALL_MINUTES) =
         p.edit().putLong("uninstallUntil", System.currentTimeMillis() + minutes * 60_000L).apply()
 
+    /** true nur beim allerersten Start des Wächters. */
+    fun firstGuardStart(): Boolean {
+        if (p.getBoolean("guardStarted", false)) return false
+        p.edit().putBoolean("guardStarted", true).apply()
+        return true
+    }
+
     fun lockAll() = p.edit().putLong("settingsUntil", 0).putLong("uninstallUntil", 0).apply()
 
     /** Anfrage-Nummer für eine Aktion ("E" = Einstellungen, "D" = Deinstallation). Bleibt gleich, bis sie benutzt wurde. */

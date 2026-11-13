@@ -1,7 +1,5 @@
 package de.sportgermany.handybremse
 
-import android.annotation.SuppressLint
-import android.app.admin.DevicePolicyManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -155,19 +153,17 @@ class MainActivity : ComponentActivity() {
 
     // ---------- Einrichtung ----------
 
-    @SuppressLint("BatteryLife")
     @Composable
     private fun SetupCard() {
         val launcher = Apps.isDefaultLauncher(this)
         val usage = Apps.hasUsageAccess(this)
         val battery = Apps.ignoresBattery(this)
         val guard = Apps.isGuardEnabled(this)
-        val admin = Apps.isAdminActive(this)
-        if (launcher && guard && admin) return
+        if (launcher && guard) return
 
         Card(Modifier.padding(bottom = 16.dp)) {
             Text("Einrichtung", color = C.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Body("Bitte genau in dieser Reihenfolge. Der Löschschutz kommt zuletzt.")
+            Body("Bitte genau in dieser Reihenfolge. Der Wächter kommt zuletzt, ab dann ist die Handybremse geschützt.")
 
             Step(1, "Als Startbildschirm festlegen", launcher) {
                 startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
@@ -175,22 +171,17 @@ class MainActivity : ComponentActivity() {
             Step(2, "Nutzungszugriff erlauben (für die Statistik, freiwillig)", usage) {
                 startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
             }
-            Step(3, "Akku: Handybremse nicht einschränken", battery) {
-                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            Step(3, "Akku: Handybremse auf „Nicht optimiert“ stellen", battery) {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             }
             if (!guard) {
-                Body("4. Wächter einschalten: Falls der Schalter grau ist, zuerst in der App-Info oben rechts auf ⋮ tippen → „Eingeschränkte Einstellungen zulassen“.", C.text)
+                Body("4. Wächter einschalten. Ist der Schalter grau („Eingeschränkte Einstellung“)? Dann einmal draufgetippt lassen, zurück, App-Info öffnen, oben rechts ⋮ → „Eingeschränkte Einstellungen zulassen“, danach nochmal.", C.text)
                 BigButton("App-Info öffnen", primary = false) {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                 }
             }
             Step(4, "Wächter einschalten (Bedienungshilfen → Installierte Apps → Handybremse)", guard) {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
-            Step(5, "Löschschutz aktivieren", admin, enabled = guard) {
-                startActivity(Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-                    .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, Apps.adminComponent(this@MainActivity))
-                    .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, getString(R.string.admin_description)))
             }
         }
     }

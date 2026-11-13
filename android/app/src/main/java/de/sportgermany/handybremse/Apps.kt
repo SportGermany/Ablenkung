@@ -1,6 +1,5 @@
 package de.sportgermany.handybremse
 
-import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -88,13 +87,6 @@ object Apps {
         val me = ComponentName(context, GuardService::class.java)
         val splitter = TextUtils.SimpleStringSplitter(':').apply { setString(enabled) }
         return splitter.any { ComponentName.unflattenFromString(it) == me }
-    }
-
-    fun adminComponent(context: Context) = ComponentName(context, AdminReceiver::class.java)
-
-    fun isAdminActive(context: Context): Boolean {
-        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        return dpm.isAdminActive(adminComponent(context))
     }
 
     fun hasUsageAccess(context: Context): Boolean {
