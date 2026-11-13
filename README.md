@@ -1,3 +1,14 @@
+# Handybremse (Android-App)
+
+Im Ordner [`android/`](android/) liegt die **Handybremse**: ein ruhiger Startbildschirm und eine Pause vor
+TikTok, Instagram und YouTube („Wofür?“ und „Wie lange?“). Die fertige App ist
+[`android/Handybremse.apk`](android/Handybremse.apk).
+
+- Einstellungen ändern und Entfernen gehen nur mit einem Freischalt-Code von Claude (siehe `CLAUDE.md`).
+- Im Notfall geht alles mit dem persönlichen Notfall-Code. Er steht nicht im Repo.
+
+---
+
 # Denkpause
 
 Eine kleine Web-App: kluge Ablenkung statt Kurzvideos – Zitate, Allgemeinwissen, Alltagshilfen, Rätsel, Quiz und "Aktuelle Politik" (live von Wikipedia) zum Zwischendurch-Lernen. Läuft komplett im Browser, alle Daten bleiben lokal auf dem Gerät (localStorage), es gibt keinen Server und kein Tracking.

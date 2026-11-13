@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
+    <!-- Damit die App alle startbaren Apps sehen kann (Startbildschirm und Suche) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Handybremse">
+
+        <!-- Startbildschirm (Launcher) -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:clearTaskOnLaunch="true"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Pause-Bildschirm vor Ablenkungs-Apps -->
+        <activity
+            android:name=".PauseActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="de.sportgermany.handybremse.pause"
+            android:excludeFromRecents="true" />
+
+        <!-- Freischalten mit Code -->
+        <activity
+            android:name=".LockActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="de.sportgermany.handybremse.lock"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:taskAffinity="de.sportgermany.handybremse.lock"
+            android:excludeFromRecents="true" />
+
+        <!-- Wächter im Hintergrund -->
+        <service
+            android:name=".GuardService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/guard_service" />
+        </service>
+
+        <!-- Löschschutz (Geräteadministrator) -->
+        <receiver
+            android:name=".AdminReceiver"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
