@@ -165,6 +165,10 @@ class GuardService : AccessibilityService() {
         collectTexts(root, texts, 0)
         val appName = getString(R.string.app_name).lowercase()
         if (texts.none { it.contains(appName) }) return
+        // Update installieren erlauben (nur Installieren/Aktualisieren, nicht Deinstallieren)
+        val isInstaller = root.packageName?.toString()?.contains("packageinstaller") == true
+        val mentionsUninstall = texts.any { it.contains("deinstall") || it.contains("uninstall") }
+        if (isInstaller && !mentionsUninstall && texts.any { it.contains("install") || it.contains("aktualis") || it.contains("update") }) return
         val danger = texts.any { t -> t in DANGER_EXACT || DANGER_WORDS.any { t.contains(it) } }
         if (!danger) return
 

@@ -106,6 +106,32 @@ class RepairActivity : ComponentActivity() {
             message?.let { Card { Body(it, C.text) } }
 
             Card {
+                Text("⬆️ Updates", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Body("Installiert: Version ${BuildConfig.VERSION_NAME}. Die App sucht alle paar Stunden selbst nach Updates.")
+                var checking by remember { mutableStateOf(false) }
+                var update by remember { mutableStateOf(Updater.available(this@RepairActivity)) }
+                update?.let { u ->
+                    Body("Neu: Version ${u.name}" + if (u.notes.isNotBlank()) "\n${u.notes}" else "", C.accent)
+                    BigButton("Herunterladen") { Updater.download(this@RepairActivity, u) }
+                    Body("Nach dem Download in der Benachrichtigung auf „Öffnen“ und dann auf „Aktualisieren“ tippen.")
+                }
+                BigButton(if (checking) "Suche …" else "Jetzt nach Updates suchen", primary = update == null, enabled = !checking) {
+                    checking = true
+                    Thread {
+                        val result = try {
+                            val u = Updater.check(this@RepairActivity, force = true)
+                            if (u == null) "✅ Du hast die neueste Version." else "⬆️ Version ${u.name} ist da!"
+                        } catch (e: Exception) { "❌ Keine Verbindung. Bist du online?" }
+                        runOnUiThread {
+                            checking = false
+                            update = Updater.available(this@RepairActivity)
+                            message = result
+                        }
+                    }.start()
+                }
+            }
+
+            Card {
                 Text("🔄 Neustart", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Body("Wenn etwas hakt: Die Handybremse und der Wächter starten komplett neu. Deine Einstellungen bleiben, und die Bremse bleibt aktiv.")
                 if (!confirmRestart) BigButton("Handybremse neu starten") { confirmRestart = true }

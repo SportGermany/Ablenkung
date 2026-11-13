@@ -173,6 +173,7 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this@MainActivity, "🎉 Fokus geschafft!", Toast.LENGTH_LONG).show()
                 }
                 Stats.checkBadges(store)
+                try { Updater.check(this@MainActivity) } catch (_: Exception) {}
             }
             value = resumeTick + 1
         }
@@ -192,6 +193,15 @@ class MainActivity : ComponentActivity() {
             if (streak > 0) parts += "🔥 $streak ${if (streak == 1) "Tag" else "Tage"} unter Ziel"
             if (declined > 0) parts += "${declined}× umentschieden 🎉"
             if (parts.isNotEmpty()) Text(parts.joinToString(" · "), color = C.accent, fontSize = 15.sp)
+
+            Updater.available(this@MainActivity)?.let { u ->
+                Card {
+                    Text("⬆️ Update ${u.name} verfügbar", color = C.accent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    if (u.notes.isNotBlank()) Body(u.notes)
+                    Body("Tippe auf „Herunterladen“. Wenn der Download fertig ist, tippe in der Benachrichtigung auf „Öffnen“ und dann auf „Aktualisieren“.")
+                    BigButton("Herunterladen") { Updater.download(this@MainActivity, u) }
+                }
+            }
 
             store.takeNewBadge()?.let { id -> Stats.badge(id) }?.let { b ->
                 Card {

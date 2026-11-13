@@ -38,16 +38,16 @@ Dann gemeinsam entscheiden:
 - den Notfall-Code nennen oder erraten. Er steht nirgends im Repo, nur in den Notizen der Person.
   Im echten Notfall kann sie ihn selbst eingeben.
 
-## App bauen
+## App bauen und als Update veröffentlichen
 
-```
-cd android
-./gradlew assembleRelease          # braucht Android SDK (sdk.dir in local.properties)
-cp app/build/outputs/apk/release/app-release.apk Handybremse.apk
-```
+1. `versionCode` (+1) und `versionName` in `android/app/build.gradle.kts` erhöhen.
+2. `cd android && ./release.sh "Kurz und auf Deutsch: was ist neu"`. Das baut die App, kopiert die APK nach
+   `android/Handybremse.apk` und schreibt `android/version.json`.
+3. Committen und pushen. Die App auf dem Handy findet das Update dann selbst (alle paar Stunden oder über
+   „Hilfe & Reparatur → Jetzt nach Updates suchen“) und lädt es über den Browser.
 
-Bei jedem Update `versionCode` in `android/app/build.gradle.kts` erhöhen. Immer mit dem Schlüssel aus
-`android/keystore/` signieren, sonst lässt sich das Update nicht über die alte Version installieren.
+Braucht das Android SDK (sdk.dir in `android/local.properties`). Immer mit dem Schlüssel aus `android/keystore/`
+signieren, sonst lässt sich das Update nicht über die alte Version installieren.
 
 ## Bilanz-Coaching
 
