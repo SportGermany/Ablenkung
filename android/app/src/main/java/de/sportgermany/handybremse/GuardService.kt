@@ -63,13 +63,32 @@ class GuardService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
 
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pkg in store.blocked) {
-            handleBlocked(pkg)
+        if (pkg in store.blocked) {
+            if (wholeAppBlocked(pkg)) {
+                if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) handleBlocked(pkg, shorts = false)
+            } else {
+                checkShorts(pkg)
+            }
         }
         if (pkg in SETTINGS_PKGS) checkProtectedPage()
     }
 
-    private fun handleBlocked(pkg: String) {
+    /** Ganze App bremsen? Bei „Nur Reels/Shorts“ nein – außer in Nachtruhe und Fokus, da ist alles zu. */
+    private fun wholeAppBlocked(pkg: String) = !store.isShortsOnly(pkg) || store.isNight() || store.focusActive()
+
+    private var lastShortsCheck = 0L
+
+    private fun checkShorts(pkg: String) {
+        if (store.sessionActive(pkg)) return
+        val now = now()
+        if (now - lastShortsCheck < 400) return
+        lastShortsCheck = now
+        val root = try { rootInActiveWindow } catch (e: Exception) { null } ?: return
+        if (root.packageName?.toString() != pkg) return
+        if (Shorts.visible(root, pkg)) handleBlocked(pkg, shorts = true)
+    }
+
+    private fun handleBlocked(pkg: String, shorts: Boolean) {
         if (store.sessionActive(pkg)) return
         val now = System.currentTimeMillis()
         if (pkg == lastPausePkg && now - lastPauseLaunch < 1_500) return
@@ -78,13 +97,16 @@ class GuardService : AccessibilityService() {
         val expired = store.sessionEnd(pkg) > 0
         if (expired) store.endSession(pkg)
         performGlobalAction(GLOBAL_ACTION_HOME)
-        handler.postDelayed({ PauseActivity.start(this, pkg, expired) }, 250)
+        handler.postDelayed({ PauseActivity.start(this, pkg, expired, shorts) }, 250)
     }
 
-    /** Läuft alle 5 Sekunden: Ist die Zeit in einer App abgelaufen, während sie offen ist? */
+    /** Läuft alle 5 Sekunden: Ist die Zeit abgelaufen, Nachtruhe oder Fokus begonnen, während die App offen ist? */
     private fun checkForeground() {
-        val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (e: Exception) { null } ?: return
-        if (pkg in store.blocked && !store.sessionActive(pkg)) handleBlocked(pkg)
+        val root = try { rootInActiveWindow } catch (e: Exception) { null } ?: return
+        val pkg = root.packageName?.toString() ?: return
+        if (pkg !in store.blocked || store.sessionActive(pkg)) return
+        if (wholeAppBlocked(pkg)) handleBlocked(pkg, shorts = false)
+        else if (Shorts.visible(root, pkg)) handleBlocked(pkg, shorts = true)
     }
 
     private fun checkProtectedPage() {

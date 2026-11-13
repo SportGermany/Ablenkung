@@ -115,8 +115,10 @@ class SettingsActivity : ComponentActivity() {
                     else "🔓 Offen, solange du hier bleibst. Wenn du rausgehst, wird wieder gesperrt.",
                     color = C.warn, fontSize = 14.sp, lineHeight = 19.sp,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("⏸ Gebremst", "🏠 Startseite", "⏰ Grenzen").forEachIndexed { i, t ->
+                val tabs = listOf("⏸ Gebremst", "🏠 Startseite", "💡 Alternativen", "⏰ Grenzen & Ziel")
+                tabs.chunked(2).forEachIndexed { row, pair -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEachIndexed { j, t ->
+                        val i = row * 2 + j
                         Text(
                             t,
                             color = if (tab == i) C.bg else C.text,
@@ -131,12 +133,13 @@ class SettingsActivity : ComponentActivity() {
                                 .padding(vertical = 12.dp),
                         )
                     }
-                }
+                } }
             }
             Box(Modifier.weight(1f)) {
                 when (tab) {
                     0 -> BlockedTab(apps)
                     1 -> FavoritesTab(apps)
+                    2 -> AlternativesTab(apps)
                     else -> LimitsTab()
                 }
             }
@@ -200,12 +203,31 @@ class SettingsActivity : ComponentActivity() {
             blocked = if (on) blocked + pkg else blocked - pkg
             store.blocked = blocked
         }
+        var shortsOnly by remember { mutableStateOf(store.shortsOnly) }
         val chosen = apps.filter { it.pkg in blocked }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), modifier = Modifier.fillMaxSize()) {
-            item { Info("Vor diesen Apps kommt immer die Pause mit „Wofür?“ und „Wie lange?“. Häkchen setzen = App wird gebremst.") }
+            item { Info("Vor diesen Apps kommt immer die Pause mit „Wofür?“ und „Wie lange?“. Häkchen setzen = App wird gebremst. Bei Instagram und YouTube kannst du einstellen, dass nur Reels bzw. Shorts gebremst werden.") }
             item { SectionHeader("GEBREMST (${chosen.size})") }
             if (chosen.isEmpty()) item { Body("Noch keine App gebremst.") }
-            items(chosen, key = { "sel_" + it.pkg }) { app -> CheckRow(app.label, true) { set(app.pkg, it) } }
+            items(chosen, key = { "sel_" + it.pkg }) { app ->
+                Column {
+                    CheckRow(app.label, true) { set(app.pkg, it) }
+                    if (app.pkg in Shorts.SUPPORTED) {
+                        val on = app.pkg in shortsOnly
+                        Row(Modifier.fillMaxWidth().padding(start = 48.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Nur ${Shorts.name(app.pkg)} bremsen", color = C.text, fontSize = 15.sp)
+                                Text(if (on) "Der Rest der App geht ohne Pause" else "Aus: die ganze App wird gebremst",
+                                    color = C.dim, fontSize = 13.sp)
+                            }
+                            Switch(checked = on, onCheckedChange = {
+                                shortsOnly = if (it) shortsOnly + app.pkg else shortsOnly - app.pkg
+                                store.shortsOnly = shortsOnly
+                            })
+                        }
+                    }
+                }
+            }
             item { SectionHeader("WEITERE APPS") }
             item { SearchField(query) { query = it } }
             appSearchList(apps, query, blocked) { app -> CheckRow(app.label, false) { set(app.pkg, it) } }
@@ -253,6 +275,42 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 
+    // ---------- Tab: Alternativen ----------
+
+    @Composable
+    private fun AlternativesTab(apps: List<AppInfo>) {
+        var alts by remember { mutableStateOf(store.altApps) }
+        var query by remember { mutableStateOf("") }
+        val max = 4
+        val full = alts.size >= max
+        fun save(v: List<String>) { alts = v; store.altApps = v }
+        val labels = apps.associate { it.pkg to it.label }
+        LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), modifier = Modifier.fillMaxSize()) {
+            item {
+                Card {
+                    Text("${alts.size} von $max Alternativ-Apps", color = if (full) C.warn else C.accent,
+                        fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Body("Wenn du bei der Pause „Mir ist langweilig“ oder „Aus Gewohnheit“ wählst, schlägt die Handybremse dir diese Apps vor, z. B. eine Lern-, Lese- oder Sport-App. Der Planer ist immer dabei.", C.text)
+                }
+            }
+            item { SectionHeader("DEINE ALTERNATIVEN") }
+            item { Body("📚 Planer (immer dabei)", C.text) }
+            items(alts, key = { "alt_$it" }) { pkg ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(labels[pkg] ?: pkg, color = C.text, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                    IconBtn("✕") { save(alts - pkg) }
+                }
+            }
+            item { SectionHeader("APP HINZUFÜGEN") }
+            if (full) item { Body("Alle $max Plätze sind belegt. Entferne oben zuerst eine App mit ✕.", C.warn) }
+            item { SearchField(query) { query = it } }
+            appSearchList(apps, query, alts.toSet() + store.blocked) { app ->
+                CheckRow(app.label, false, enabled = !full) { if (it) save(alts + app.pkg) }
+            }
+            item { Spacer(Modifier.height(16.dp)) }
+        }
+    }
+
     @Composable
     private fun IconBtn(t: String, enabled: Boolean = true, onClick: () -> Unit) {
         Text(t, color = if (enabled) C.text else C.line, fontSize = 18.sp, textAlign = TextAlign.Center,
@@ -276,11 +334,21 @@ class SettingsActivity : ComponentActivity() {
     @Composable
     private fun LimitsTab() {
         var limit by remember { mutableIntStateOf(store.dailyLimit) }
+        var goal by remember { mutableIntStateOf(store.dailyGoal) }
         var nightOn by remember { mutableStateOf(store.nightOn) }
         var from by remember { mutableIntStateOf(store.nightFrom) }
         var to by remember { mutableIntStateOf(store.nightTo) }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()) {
+            item {
+                Card {
+                    Text("Tagesziel 🎯", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Body("Höchstens so viele Minuten am Tag in gebremsten Apps. Danach richten sich Balken, Serie 🔥 und Abzeichen.")
+                    Stepper("Minuten pro Tag", "$goal Min",
+                        { goal = (goal - 5).coerceAtLeast(5); store.dailyGoal = goal },
+                        { goal = (goal + 5).coerceAtMost(300); store.dailyGoal = goal })
+                }
+            }
             item {
                 Card {
                     Text("Wie oft am Tag?", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)

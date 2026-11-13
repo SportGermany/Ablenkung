@@ -45,6 +45,11 @@
             android:taskAffinity="de.sportgermany.handybremse.pause"
             android:excludeFromRecents="true" />
 
+        <!-- Statistik -->
+        <activity
+            android:name=".StatsActivity"
+            android:exported="false" />
+
         <!-- Freischalten mit Code -->
         <activity
             android:name=".LockActivity"

@@ -48,3 +48,9 @@ cp app/build/outputs/apk/release/app-release.apk Handybremse.apk
 
 Bei jedem Update `versionCode` in `android/app/build.gradle.kts` erhöhen. Immer mit dem Schlüssel aus
 `android/keystore/` signieren, sonst lässt sich das Update nicht über die alte Version installieren.
+
+## Bilanz-Coaching
+
+Schickt die Person ihre kopierte „Handybremse-Bilanz“, gib ehrliches, freundliches Feedback: Was lief gut
+(loben!), wo sind Muster (bestimmte Tage, Apps, Nachtruhe-Versuche), und 1–2 konkrete, kleine Tipps für die
+nächste Woche. Kein Code dafür nötig, und Einstellungsänderungen nur mit dem normalen Code-Ablauf oben.

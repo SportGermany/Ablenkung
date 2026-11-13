@@ -64,33 +64,83 @@ class Store(context: Context) {
         return if (from == to) false else if (from < to) m in from until to else (m >= from || m < to)
     }
 
-    // ---------- Tageszähler ----------
+    // ---------- Weitere Einstellungen ----------
 
-    private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.GERMANY).format(Date())
+    /** Apps, bei denen nur Reels/Shorts gebremst werden (nicht die ganze App). */
+    var shortsOnly: Set<String>
+        get() = p.getStringSet("shortsOnly", null) ?: Shorts.SUPPORTED.keys
+        set(v) = p.edit().putStringSet("shortsOnly", v.toSet()).apply()
+
+    fun isShortsOnly(pkg: String) = pkg in Shorts.SUPPORTED && pkg in shortsOnly
+
+    /** Tagesziel: höchstens so viele Minuten in gebremsten Apps. */
+    var dailyGoal: Int
+        get() = p.getInt("dailyGoal", 45)
+        set(v) = p.edit().putInt("dailyGoal", v.coerceIn(5, 300)).apply()
+
+    /** Apps, die als Alternative vorgeschlagen werden. */
+    var altApps: List<String>
+        get() = p.getString("altApps", "")!!.split(",").filter { it.isNotBlank() }
+        set(v) = p.edit().putString("altApps", v.joinToString(",")).apply()
+
+    // ---------- Tageszähler (pro Datum gespeichert, für die Statistik) ----------
+
+    fun dayKey(offsetDays: Int = 0): String {
+        val c = Calendar.getInstance()
+        c.add(Calendar.DAY_OF_YEAR, -offsetDays)
+        return SimpleDateFormat("yyyy-MM-dd", Locale.GERMANY).format(c.time)
+    }
+
+    private fun today() = dayKey(0)
 
     private fun ensureDay() {
         val t = today()
-        if (p.getString("day", null) != t) {
-            val e = p.edit()
-            p.all.keys.filter { it.startsWith("opens_") }.forEach { e.remove(it) }
-            e.putInt("declined", 0)
-            e.putString("day", t)
-            e.apply()
-        }
+        if (p.getString("day", null) == t) return
+        // Alte Einträge (älter als 60 Tage) aufräumen
+        val keep = (0..60).map { dayKey(it) }.toSet()
+        val e = p.edit()
+        p.all.keys.filter { k ->
+            val m = Regex("^[odmnx]_(\\d{4}-\\d{2}-\\d{2})").find(k) ?: return@filter k.startsWith("opens_")
+            m.groupValues[1] !in keep
+        }.forEach { e.remove(it) }
+        e.putString("day", t).apply()
     }
 
-    fun opensToday(pkg: String): Int { ensureDay(); return p.getInt("opens_$pkg", 0) }
-    fun declinedToday(): Int { ensureDay(); return p.getInt("declined", 0) }
-    fun addDeclined() { ensureDay(); p.edit().putInt("declined", declinedToday() + 1).apply() }
+    fun opens(pkg: String, day: String = today()): Int { ensureDay(); return p.getInt("o_${day}_$pkg", 0) }
+    fun opensToday(pkg: String) = opens(pkg)
+    fun opensAll(day: String): Int = p.all.entries.filter { it.key.startsWith("o_${day}_") }.sumOf { (it.value as? Int) ?: 0 }
+    fun opensByApp(day: String): Map<String, Int> =
+        p.all.entries.filter { it.key.startsWith("o_${day}_") }.associate { it.key.removePrefix("o_${day}_") to ((it.value as? Int) ?: 0) }
+
+    fun declined(day: String = today()): Int { ensureDay(); return p.getInt("d_$day", 0) }
+    fun declinedToday() = declined()
+    fun declinedTotal() = p.getInt("declinedTotal", 0)
+    fun addDeclined() {
+        ensureDay()
+        p.edit().putInt("d_${today()}", declined() + 1).putInt("declinedTotal", declinedTotal() + 1).apply()
+    }
+
+    /** Minuten in gebremsten Apps (vom Handy gemessen und hier gemerkt). -1 = unbekannt. */
+    fun minutes(day: String): Int = p.getInt("m_$day", -1)
+    fun setMinutes(day: String, m: Int) = p.edit().putInt("m_$day", m).apply()
+
+    fun nightTries(day: String): Int = p.getInt("n_$day", 0)
+    fun addNightTry() { ensureDay(); p.edit().putInt("n_${today()}", nightTries(today()) + 1).apply() }
 
     fun limitReached(pkg: String) = opensToday(pkg) >= dailyLimit
+
+    /** Tag, ab dem es Daten gibt (erster Start). */
+    fun firstDay(): String {
+        p.getString("firstDay", null)?.let { return it }
+        val t = today(); p.edit().putString("firstDay", t).apply(); return t
+    }
 
     // ---------- Sitzungen (freigegebene Zeit in einer App) ----------
 
     fun sessionEnd(pkg: String): Long = p.getLong("session_$pkg", 0L)
 
     fun sessionActive(pkg: String, now: Long = System.currentTimeMillis()): Boolean =
-        sessionEnd(pkg) > now && !isNight(now)
+        sessionEnd(pkg) > now && !isNight(now) && !focusActive(now)
 
     fun intention(pkg: String): String? = p.getString("intention_$pkg", null)
 
@@ -99,13 +149,54 @@ class Store(context: Context) {
         p.edit()
             .putLong("session_$pkg", System.currentTimeMillis() + minutes * 60_000L)
             .putString("intention_$pkg", intention)
-            .putInt("opens_$pkg", opensToday(pkg) + 1)
+            .putInt("o_${today()}_$pkg", opensToday(pkg) + 1)
+            .putBoolean("extended_$pkg", false)
+            .apply()
+    }
+
+    fun canExtend(pkg: String) = !p.getBoolean("extended_$pkg", false) && !limitReached(pkg)
+
+    /** Einmal um 5 Minuten verlängern – zählt als eine Öffnung. */
+    fun extend(pkg: String, minutes: Int = 5) {
+        ensureDay()
+        p.edit()
+            .putLong("session_$pkg", System.currentTimeMillis() + minutes * 60_000L)
+            .putInt("o_${today()}_$pkg", opensToday(pkg) + 1)
+            .putBoolean("extended_$pkg", true)
             .apply()
     }
 
     fun endSession(pkg: String) {
         p.edit().putLong("session_$pkg", 0L).apply()
     }
+
+    // ---------- Fokus-Timer ----------
+
+    fun focusUntil() = p.getLong("focusUntil", 0)
+    fun focusActive(now: Long = System.currentTimeMillis()) = focusUntil() > now
+    fun startFocus(minutes: Int) = p.edit().putLong("focusUntil", System.currentTimeMillis() + minutes * 60_000L)
+        .putInt("focusMinutes", minutes).putBoolean("focusCounted", false).apply()
+    fun cancelFocus() = p.edit().putLong("focusUntil", 0).putBoolean("focusCounted", true).apply()
+    fun focusDone() = p.getInt("focusDone", 0)
+
+    /** Zählt einen abgeschlossenen Fokus genau einmal. Gibt true zurück, wenn gerade einer fertig geworden ist. */
+    fun collectFinishedFocus(): Boolean {
+        if (focusUntil() == 0L || focusActive() || p.getBoolean("focusCounted", true)) return false
+        p.edit().putBoolean("focusCounted", true).putInt("focusDone", focusDone() + 1).apply()
+        return true
+    }
+
+    // ---------- Abzeichen ----------
+
+    fun badgeDate(id: String): String? = p.getString("badge_$id", null)
+    fun grantBadge(id: String) = p.edit().putString("badge_$id", today()).putString("newBadge", id).apply()
+    fun takeNewBadge(): String? = p.getString("newBadge", null)
+    fun clearNewBadge() = p.edit().remove("newBadge").apply()
+
+    // ---------- Wochen-Rückblick ----------
+
+    fun reviewDismissed(day: String) = p.getBoolean("x_${day}_review", false)
+    fun dismissReview(day: String) = p.edit().putBoolean("x_${day}_review", true).apply()
 
     // ---------- Freischaltungen ----------
 

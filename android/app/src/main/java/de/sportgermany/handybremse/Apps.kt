@@ -47,8 +47,9 @@ object Apps {
     /** Öffnet eine App: gebremste Apps zuerst über den Pause-Bildschirm. */
     fun open(context: Context, pkg: String) {
         val store = Store(context)
-        if (pkg in store.blocked && !store.sessionActive(pkg)) {
-            PauseActivity.start(context, pkg, expired = false)
+        val whole = !store.isShortsOnly(pkg) || store.isNight() || store.focusActive()
+        if (pkg in store.blocked && whole && !store.sessionActive(pkg)) {
+            PauseActivity.start(context, pkg, expired = false, shorts = false)
         } else launchDirect(context, pkg)
     }
 

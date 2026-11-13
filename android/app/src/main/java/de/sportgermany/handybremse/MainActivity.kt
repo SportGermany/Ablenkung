@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -73,7 +74,12 @@ class MainActivity : ComponentActivity() {
         val store = remember { Store(this) }
         @Suppress("UNUSED_EXPRESSION") resumeTick
         var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-        LaunchedEffect(Unit) { while (true) { delay(15_000); now = System.currentTimeMillis() } }
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(if (store.focusActive()) 1_000 else 15_000)
+                now = System.currentTimeMillis()
+            }
+        }
 
         var apps by remember { mutableStateOf(Apps.cached() ?: emptyList()) }
         var favList by remember { mutableStateOf(store.favorites ?: emptyList()) }
@@ -106,8 +112,10 @@ class MainActivity : ComponentActivity() {
             Text(SimpleDateFormat("EEEE, d. MMMM", Locale.GERMANY).format(Date(now)),
                 color = C.dim, fontSize = 18.sp)
             Spacer(Modifier.height(8.dp))
-            StatsLine(store, blocked)
-            Spacer(Modifier.height(24.dp))
+            StatsBlock(store, now)
+            Spacer(Modifier.height(16.dp))
+            FocusBlock(store, now)
+            Spacer(Modifier.height(8.dp))
 
             SetupCard()
 
@@ -135,6 +143,9 @@ class MainActivity : ComponentActivity() {
             }
 
             Spacer(Modifier.height(32.dp))
+            Text("📊 Statistik & Abzeichen", color = C.dim, fontSize = 15.sp,
+                modifier = Modifier.clickable { startActivity(Intent(this@MainActivity, StatsActivity::class.java)) }
+                    .padding(vertical = 8.dp))
             val open = store.settingsUnlocked(now)
             val openText = if (!open) "🔒 Einstellungen"
                 else "🔓 Einstellungen – noch offen bis " + SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(store.settingsUntil()))
@@ -146,16 +157,102 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Tagesziel, Serie, neue Abzeichen und Sonntags der Wochen-Rückblick. */
     @Composable
-    private fun StatsLine(store: Store, blocked: Set<String>) {
-        val declined = store.declinedToday()
-        val minutes by produceState<Int?>(initialValue = null, resumeTick) {
-            value = withContext(Dispatchers.Default) { Apps.minutesToday(this@MainActivity, blocked) }
+    private fun StatsBlock(store: Store, now: Long) {
+        // Im Hintergrund: Minuten holen, Fokus zählen, Abzeichen prüfen
+        val refreshed by produceState(initialValue = 0, resumeTick) {
+            withContext(Dispatchers.Default) {
+                Stats.refreshMinutes(this@MainActivity, store)
+                if (store.collectFinishedFocus()) withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "🎉 Fokus geschafft!", Toast.LENGTH_LONG).show()
+                }
+                Stats.checkBadges(store)
+            }
+            value = resumeTick + 1
         }
-        val parts = mutableListOf<String>()
-        if (declined > 0) parts += "Heute ${declined}× umentschieden 🎉"
-        if (minutes != null) parts += "Ablenkungs-Apps: $minutes Min"
-        if (parts.isNotEmpty()) Text(parts.joinToString(" · "), color = C.accent, fontSize = 15.sp)
+        @Suppress("UNUSED_EXPRESSION") refreshed
+        @Suppress("UNUSED_EXPRESSION") now
+        var dismissTick by remember { mutableIntStateOf(0) }
+        @Suppress("UNUSED_EXPRESSION") dismissTick
+
+        val today = store.dayKey()
+        val minutes = store.minutes(today)
+        val declined = store.declinedToday()
+        val streak = Stats.streak(store)
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (Apps.hasUsageAccess(this@MainActivity) && minutes >= 0) GoalBar(minutes, store.dailyGoal)
+            val parts = mutableListOf<String>()
+            if (streak > 0) parts += "🔥 $streak ${if (streak == 1) "Tag" else "Tage"} unter Ziel"
+            if (declined > 0) parts += "${declined}× umentschieden 🎉"
+            if (parts.isNotEmpty()) Text(parts.joinToString(" · "), color = C.accent, fontSize = 15.sp)
+
+            store.takeNewBadge()?.let { id -> Stats.badge(id) }?.let { b ->
+                Card {
+                    Text("${b.emoji} Neues Abzeichen: ${b.title}", color = C.accent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Body(b.text)
+                    BigButton("Super!", primary = false) { store.clearNewBadge(); dismissTick++ }
+                }
+            }
+
+            if (Stats.isSunday() && !store.reviewDismissed(today)) {
+                val w = Stats.week(store)
+                Card {
+                    Text("📅 Dein Wochen-Rückblick", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    val last7 = (0..6).map { store.dayKey(it) }
+                    Body("Letzte 7 Tage: " + (w.thisWeek?.let { Stats.fmtMin(it) } ?: "noch zu wenig Daten") +
+                        " · ${last7.sumOf { store.opensAll(it) }}× geöffnet · ${last7.sumOf { store.declined(it) }}× umentschieden")
+                    w.saved?.let {
+                        if (it > 0) Body("🎉 ${Stats.savedText(it)} weniger als letzte Woche!", C.accent)
+                        else if (it < 0) Body("${Stats.fmtMin(-it)} mehr als letzte Woche. Neue Woche, neue Chance!", C.warn)
+                    }
+                    Body("🔥 Serie: $streak Tage", C.text)
+                    BigButton("Statistik ansehen", primary = false) {
+                        startActivity(Intent(this@MainActivity, StatsActivity::class.java))
+                    }
+                    BigButton("Okay", primary = false) { store.dismissReview(today); dismissTick++ }
+                }
+            }
+        }
+    }
+
+    /** Fokus-Timer: freiwillig starten, dann sind alle gebremsten Apps komplett zu. */
+    @Composable
+    private fun FocusBlock(store: Store, now: Long) {
+        var choosing by remember { mutableStateOf(false) }
+        var confirmCancel by remember { mutableStateOf(false) }
+        var tick by remember { mutableIntStateOf(0) }
+        @Suppress("UNUSED_EXPRESSION") tick
+        if (store.focusActive(now)) {
+            val left = ((store.focusUntil() - now) / 1000).coerceAtLeast(0)
+            Card {
+                Text("🎯 Fokus", color = C.accent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text("%d:%02d".format(left / 60, left % 60), color = C.text, fontSize = 44.sp, fontWeight = FontWeight.Light)
+                Body("Alle gebremsten Apps sind bis zum Ende komplett zu.")
+                if (!confirmCancel) {
+                    Text("Fokus abbrechen", color = C.dim, fontSize = 14.sp,
+                        modifier = Modifier.clickable { confirmCancel = true }.padding(vertical = 4.dp))
+                } else {
+                    Body("Wirklich abbrechen? Dann zählt dieser Fokus nicht.", C.warn)
+                    BigButton("Weitermachen 💪") { confirmCancel = false }
+                    BigButton("Ja, abbrechen", primary = false) { store.cancelFocus(); confirmCancel = false; tick++ }
+                }
+            }
+        } else if (choosing) {
+            Card {
+                Text("🎯 Wie lange Fokus?", color = C.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Body("In dieser Zeit sind alle gebremsten Apps komplett zu, auch Reels und Shorts.")
+                listOf(25, 45, 60, 90).forEach { m ->
+                    BigButton("$m Minuten", primary = false) { store.startFocus(m); choosing = false; tick++ }
+                }
+                Text("Abbrechen", color = C.dim, fontSize = 14.sp,
+                    modifier = Modifier.clickable { choosing = false }.padding(vertical = 4.dp))
+            }
+        } else {
+            Text("🎯 Fokus starten", color = C.accent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { choosing = true }.padding(vertical = 6.dp))
+        }
     }
 
     @Composable
