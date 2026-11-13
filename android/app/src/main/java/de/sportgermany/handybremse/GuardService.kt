@@ -70,16 +70,35 @@ class GuardService : AccessibilityService() {
                 checkShorts(pkg)
             }
         }
+        if (pkg in Web.BROWSERS) checkBrowser(pkg)
         if (pkg in SETTINGS_PKGS) checkProtectedPage()
     }
 
-    /** Ganze App bremsen? Bei „Nur Reels/Shorts“ nein – außer in Nachtruhe und Fokus, da ist alles zu. */
-    private fun wholeAppBlocked(pkg: String) = !store.isShortsOnly(pkg) || store.isNight() || store.focusActive()
+    /** Ganze App bremsen? Bei „Nur Reels/Shorts“ nein – außer in Nachtruhe, Fokus und Sperrzeiten, da ist alles zu. */
+    private fun wholeAppBlocked(pkg: String) = !store.isShortsOnly(pkg) || store.hardLocked()
+
+    // ---------- Zeit pro App ----------
+
+    private val usedCache = HashMap<String, Pair<Long, Int>>()
+
+    /** Ist das eigene Tageslimit (Minuten) dieser App aufgebraucht? Wird höchstens alle 30 s neu gemessen. */
+    private fun appTimeUp(pkg: String): Boolean {
+        val limit = store.appLimit(pkg)
+        if (limit <= 0) return false
+        val now = now()
+        val cached = usedCache[pkg]
+        val used = if (cached != null && now - cached.first < 30_000) cached.second
+            else (Apps.appMinutesToday(this, pkg) ?: return false).also { usedCache[pkg] = now to it }
+        return used >= limit
+    }
+
+    /** Darf die App gerade offen sein? */
+    private fun allowed(pkg: String) = store.sessionActive(pkg) && !appTimeUp(pkg)
 
     private var lastShortsCheck = 0L
 
     private fun checkShorts(pkg: String) {
-        if (store.sessionActive(pkg)) return
+        if (allowed(pkg)) return
         val now = now()
         if (now - lastShortsCheck < 400) return
         lastShortsCheck = now
@@ -88,8 +107,31 @@ class GuardService : AccessibilityService() {
         if (Shorts.visible(root, pkg)) handleBlocked(pkg, shorts = true)
     }
 
-    private fun handleBlocked(pkg: String, shorts: Boolean) {
-        if (store.sessionActive(pkg)) return
+    // ---------- Websites im Browser ----------
+
+    private var lastBrowserCheck = 0L
+
+    private fun checkBrowser(browser: String) {
+        val now = now()
+        if (now - lastBrowserCheck < 700) return
+        lastBrowserCheck = now
+        val root = try { rootInActiveWindow } catch (e: Exception) { null } ?: return
+        if (root.packageName?.toString() != browser) return
+        checkBrowserRoot(root, browser)
+    }
+
+    private fun checkBrowserRoot(root: AccessibilityNodeInfo, browser: String) {
+        val url = Web.url(root, browser) ?: return
+        val hit = Web.match(url, store.blocked) ?: return
+        if (allowed(hit.pkg)) return
+        val whole = wholeAppBlocked(hit.pkg)
+        if (whole || hit.shorts) handleBlocked(hit.pkg, shorts = !whole && hit.shorts, returnPkg = browser)
+    }
+
+    // ---------- Pause zeigen ----------
+
+    private fun handleBlocked(pkg: String, shorts: Boolean, returnPkg: String? = null) {
+        if (allowed(pkg)) return
         val now = System.currentTimeMillis()
         if (pkg == lastPausePkg && now - lastPauseLaunch < 1_500) return
         lastPausePkg = pkg
@@ -97,14 +139,15 @@ class GuardService : AccessibilityService() {
         val expired = store.sessionEnd(pkg) > 0
         if (expired) store.endSession(pkg)
         performGlobalAction(GLOBAL_ACTION_HOME)
-        handler.postDelayed({ PauseActivity.start(this, pkg, expired, shorts) }, 250)
+        handler.postDelayed({ PauseActivity.start(this, pkg, expired, shorts, returnPkg) }, 250)
     }
 
-    /** Läuft alle 5 Sekunden: Ist die Zeit abgelaufen, Nachtruhe oder Fokus begonnen, während die App offen ist? */
+    /** Läuft alle 5 Sekunden: Ist die Zeit abgelaufen, Nachtruhe, Fokus oder Sperrzeit begonnen, während die App offen ist? */
     private fun checkForeground() {
         val root = try { rootInActiveWindow } catch (e: Exception) { null } ?: return
         val pkg = root.packageName?.toString() ?: return
-        if (pkg !in store.blocked || store.sessionActive(pkg)) return
+        if (pkg in Web.BROWSERS) { checkBrowserRoot(root, pkg); return }
+        if (pkg !in store.blocked || allowed(pkg)) return
         if (wholeAppBlocked(pkg)) handleBlocked(pkg, shorts = false)
         else if (Shorts.visible(root, pkg)) handleBlocked(pkg, shorts = true)
     }

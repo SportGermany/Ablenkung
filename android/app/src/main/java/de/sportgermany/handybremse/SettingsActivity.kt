@@ -206,7 +206,7 @@ class SettingsActivity : ComponentActivity() {
         var shortsOnly by remember { mutableStateOf(store.shortsOnly) }
         val chosen = apps.filter { it.pkg in blocked }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), modifier = Modifier.fillMaxSize()) {
-            item { Info("Vor diesen Apps kommt immer die Pause mit „Wofür?“ und „Wie lange?“. Häkchen setzen = App wird gebremst. Bei Instagram und YouTube kannst du einstellen, dass nur Reels bzw. Shorts gebremst werden.") }
+            item { Info("Vor diesen Apps kommt immer die Pause mit „Wofür?“ und „Wie lange?“. Häkchen setzen = App wird gebremst. Bei Instagram und YouTube kannst du einstellen, dass nur Reels bzw. Shorts gebremst werden. „Zeit pro Tag“ gibt jeder App ein eigenes Minuten-Limit. Die Bremse gilt auch für die Websites im Browser (tiktok.com, instagram.com, youtube.com).") }
             item { SectionHeader("GEBREMST (${chosen.size})") }
             if (chosen.isEmpty()) item { Body("Noch keine App gebremst.") }
             items(chosen, key = { "sel_" + it.pkg }) { app ->
@@ -225,6 +225,18 @@ class SettingsActivity : ComponentActivity() {
                                 store.shortsOnly = shortsOnly
                             })
                         }
+                    }
+                    var appLim by remember(app.pkg) { mutableIntStateOf(store.appLimit(app.pkg)) }
+                    Row(Modifier.fillMaxWidth().padding(start = 48.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Zeit pro Tag", color = C.text, fontSize = 15.sp)
+                            Text(if (appLim == 0) "Kein eigenes Limit" else "Höchstens $appLim Min am Tag",
+                                color = C.dim, fontSize = 13.sp)
+                        }
+                        IconBtn("–", enabled = appLim > 0) { appLim = (appLim - 5).coerceAtLeast(0); store.setAppLimit(app.pkg, appLim) }
+                        Text(if (appLim == 0) "aus" else "$appLim", color = C.accent, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center, modifier = Modifier.width(48.dp))
+                        IconBtn("+") { appLim = (appLim + 5).coerceAtMost(300); store.setAppLimit(app.pkg, appLim) }
                     }
                 }
             }
@@ -338,11 +350,16 @@ class SettingsActivity : ComponentActivity() {
         var nightOn by remember { mutableStateOf(store.nightOn) }
         var from by remember { mutableIntStateOf(store.nightFrom) }
         var to by remember { mutableIntStateOf(store.nightTo) }
+        var weekend by remember { mutableStateOf(store.weekendDifferent) }
+        var wLimit by remember { mutableIntStateOf(store.weekendLimit) }
+        var wGoal by remember { mutableIntStateOf(store.weekendGoal) }
+        var blocks by remember { mutableStateOf(store.blocks) }
+        fun saveBlocks(v: List<Store.Block>) { blocks = v; store.blocks = v }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()) {
             item {
                 Card {
-                    Text("Tagesziel 🎯", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (weekend) "Tagesziel 🎯 (Mo–Fr)" else "Tagesziel 🎯", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Body("Höchstens so viele Minuten am Tag in gebremsten Apps. Danach richten sich Balken, Serie 🔥 und Abzeichen.")
                     Stepper("Minuten pro Tag", "$goal Min",
                         { goal = (goal - 5).coerceAtLeast(5); store.dailyGoal = goal },
@@ -351,7 +368,7 @@ class SettingsActivity : ComponentActivity() {
             }
             item {
                 Card {
-                    Text("Wie oft am Tag?", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Text(if (weekend) "Wie oft am Tag? (Mo–Fr)" else "Wie oft am Tag?", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                     Body("So oft darfst du jede gebremste App pro Tag öffnen. Danach ist sie bis Mitternacht gesperrt.")
                     Stepper("Öffnungen pro App", "$limit×",
                         { limit = (limit - 1).coerceAtLeast(1); store.dailyLimit = limit },
@@ -374,6 +391,73 @@ class SettingsActivity : ComponentActivity() {
                     }
                 }
             }
+            item {
+                Card {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Wochenende anders 🎉", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f))
+                        Switch(checked = weekend, onCheckedChange = { weekend = it; store.weekendDifferent = it })
+                    }
+                    Body("Eigenes Tagesziel und eigenes Limit für Samstag und Sonntag.")
+                    if (weekend) {
+                        Stepper("Ziel Sa/So", "$wGoal Min",
+                            { wGoal = (wGoal - 5).coerceAtLeast(5); store.weekendGoal = wGoal },
+                            { wGoal = (wGoal + 5).coerceAtMost(300); store.weekendGoal = wGoal })
+                        Stepper("Öffnungen Sa/So", "$wLimit×",
+                            { wLimit = (wLimit - 1).coerceAtLeast(1); store.weekendLimit = wLimit },
+                            { wLimit = (wLimit + 1).coerceAtMost(30); store.weekendLimit = wLimit })
+                    }
+                }
+            }
+            item {
+                Card {
+                    Text("Sperrzeiten ⛔", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    Body("Feste Zeiten, z. B. Schule oder Training. Dann sind alle gebremsten Apps komplett zu, wie in der Nachtruhe.")
+                    if (blocks.isEmpty()) Body("Noch keine Sperrzeit.", C.text)
+                    blocks.forEachIndexed { i, b ->
+                        fun upd(nb: Store.Block) = saveBlocks(blocks.toMutableList().apply { set(i, nb) })
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.bg).padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(b.name, color = C.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                IconBtn("✕") { saveBlocks(blocks.toMutableList().apply { removeAt(i) }) }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So").forEachIndexed { d, label ->
+                                    val on = b.days.getOrNull(d) == '1'
+                                    Text(label, color = if (on) C.bg else C.dim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                                            .background(if (on) C.accent else C.card)
+                                            .clickable {
+                                                val chars = b.days.padEnd(7, '0').toCharArray()
+                                                chars[d] = if (on) '0' else '1'
+                                                upd(b.copy(days = String(chars)))
+                                            }.padding(vertical = 8.dp))
+                                }
+                            }
+                            Stepper("Von", hhmm(b.from), { upd(b.copy(from = Math.floorMod(b.from - 15, 1440))) },
+                                { upd(b.copy(from = Math.floorMod(b.from + 15, 1440))) })
+                            Stepper("Bis", hhmm(b.to), { upd(b.copy(to = Math.floorMod(b.to - 15, 1440))) },
+                                { upd(b.copy(to = Math.floorMod(b.to + 15, 1440))) })
+                            if (b.from >= b.to) Body("„Bis“ muss nach „Von“ liegen.", C.warn)
+                        }
+                    }
+                    Body("Neue Sperrzeit hinzufügen:")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            Store.Block("Schule", "1111100", 8 * 60, 13 * 60),
+                            Store.Block("Training", "1010100", 17 * 60, 19 * 60),
+                            Store.Block("Lernen", "1111000", 15 * 60, 17 * 60),
+                        ).forEach { preset ->
+                            Text("+ ${preset.name}", color = C.text, fontSize = 14.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(C.line)
+                                    .clickable { saveBlocks(blocks + preset) }.padding(vertical = 10.dp))
+                        }
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(16.dp)) }
         }
     }
 }

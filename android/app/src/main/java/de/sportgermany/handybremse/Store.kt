@@ -83,6 +83,73 @@ class Store(context: Context) {
         get() = p.getString("altApps", "")!!.split(",").filter { it.isNotBlank() }
         set(v) = p.edit().putString("altApps", v.joinToString(",")).apply()
 
+    // ---------- Wochenende ----------
+
+    var weekendDifferent: Boolean
+        get() = p.getBoolean("weekendDifferent", false)
+        set(v) = p.edit().putBoolean("weekendDifferent", v).apply()
+
+    var weekendLimit: Int
+        get() = p.getInt("weekendLimit", dailyLimit)
+        set(v) = p.edit().putInt("weekendLimit", v.coerceIn(1, 30)).apply()
+
+    var weekendGoal: Int
+        get() = p.getInt("weekendGoal", dailyGoal)
+        set(v) = p.edit().putInt("weekendGoal", v.coerceIn(5, 300)).apply()
+
+    private fun calOf(day: String): Calendar = Calendar.getInstance().apply {
+        time = SimpleDateFormat("yyyy-MM-dd", Locale.GERMANY).parse(day) ?: Date()
+    }
+
+    fun isWeekend(day: String = today()): Boolean {
+        val d = calOf(day).get(Calendar.DAY_OF_WEEK)
+        return d == Calendar.SATURDAY || d == Calendar.SUNDAY
+    }
+
+    /** Öffnungen pro App an diesem Tag (Wochenende kann anders sein). */
+    fun limitFor(day: String = today()) = if (weekendDifferent && isWeekend(day)) weekendLimit else dailyLimit
+
+    /** Tagesziel in Minuten an diesem Tag. */
+    fun goalFor(day: String = today()) = if (weekendDifferent && isWeekend(day)) weekendGoal else dailyGoal
+
+    // ---------- Sperrzeiten (z. B. Schule, Training) ----------
+
+    /** days: 7 Zeichen Mo..So, "1" = an diesem Tag aktiv. from/to: Minuten seit Mitternacht. */
+    data class Block(val name: String, val days: String, val from: Int, val to: Int)
+
+    var blocks: List<Block>
+        get() = p.getString("blocks", "")!!.split("\n").filter { it.isNotBlank() }.mapNotNull { line ->
+            val f = line.split("|")
+            if (f.size == 4) Block(f[0], f[1], f[2].toIntOrNull() ?: 0, f[3].toIntOrNull() ?: 0) else null
+        }
+        set(v) = p.edit().putString("blocks", v.joinToString("\n") {
+            "${it.name.replace("|", " ").replace("\n", " ")}|${it.days}|${it.from}|${it.to}"
+        }).apply()
+
+    /** Die gerade laufende Sperrzeit oder null. */
+    fun activeBlock(now: Long = System.currentTimeMillis()): Block? {
+        val c = Calendar.getInstance().apply { timeInMillis = now }
+        val idx = (c.get(Calendar.DAY_OF_WEEK) + 5) % 7   // Mo=0 … So=6
+        val m = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
+        return blocks.firstOrNull { b -> b.days.getOrNull(idx) == '1' && b.from < b.to && m >= b.from && m < b.to }
+    }
+
+    /** Nachtruhe, Fokus oder Sperrzeit: alle gebremsten Apps komplett zu. */
+    fun hardLocked(now: Long = System.currentTimeMillis()) = isNight(now) || focusActive(now) || activeBlock(now) != null
+
+    // ---------- Zeit pro App ----------
+
+    /** Minuten pro Tag für diese App, 0 = kein eigenes Limit. */
+    fun appLimit(pkg: String) = p.getInt("appLimit_$pkg", 0)
+    fun setAppLimit(pkg: String, minutes: Int) = p.edit().putInt("appLimit_$pkg", minutes.coerceIn(0, 300)).apply()
+
+    // ---------- Fokus-Wald ----------
+
+    /** Bäume: Minuten eines geschafften Fokus oder "x" für einen abgebrochenen. */
+    fun forest(): List<String> = p.getString("forest", "")!!.split(",").filter { it.isNotBlank() }
+    private fun plant(tree: String) = p.edit().putString("forest", (forest() + tree).takeLast(500).joinToString(",")).apply()
+    fun focusMinutes() = p.getInt("focusMinutes", 25)
+
     // ---------- Tageszähler (pro Datum gespeichert, für die Statistik) ----------
 
     fun dayKey(offsetDays: Int = 0): String {
@@ -127,7 +194,7 @@ class Store(context: Context) {
     fun nightTries(day: String): Int = p.getInt("n_$day", 0)
     fun addNightTry() { ensureDay(); p.edit().putInt("n_${today()}", nightTries(today()) + 1).apply() }
 
-    fun limitReached(pkg: String) = opensToday(pkg) >= dailyLimit
+    fun limitReached(pkg: String) = opensToday(pkg) >= limitFor()
 
     /** Tag, ab dem es Daten gibt (erster Start). */
     fun firstDay(): String {
@@ -140,7 +207,7 @@ class Store(context: Context) {
     fun sessionEnd(pkg: String): Long = p.getLong("session_$pkg", 0L)
 
     fun sessionActive(pkg: String, now: Long = System.currentTimeMillis()): Boolean =
-        sessionEnd(pkg) > now && !isNight(now) && !focusActive(now)
+        sessionEnd(pkg) > now && !hardLocked(now)
 
     fun intention(pkg: String): String? = p.getString("intention_$pkg", null)
 
@@ -176,13 +243,17 @@ class Store(context: Context) {
     fun focusActive(now: Long = System.currentTimeMillis()) = focusUntil() > now
     fun startFocus(minutes: Int) = p.edit().putLong("focusUntil", System.currentTimeMillis() + minutes * 60_000L)
         .putInt("focusMinutes", minutes).putBoolean("focusCounted", false).apply()
-    fun cancelFocus() = p.edit().putLong("focusUntil", 0).putBoolean("focusCounted", true).apply()
+    fun cancelFocus() {
+        if (focusActive()) plant("x")
+        p.edit().putLong("focusUntil", 0).putBoolean("focusCounted", true).apply()
+    }
     fun focusDone() = p.getInt("focusDone", 0)
 
     /** Zählt einen abgeschlossenen Fokus genau einmal. Gibt true zurück, wenn gerade einer fertig geworden ist. */
     fun collectFinishedFocus(): Boolean {
         if (focusUntil() == 0L || focusActive() || p.getBoolean("focusCounted", true)) return false
         p.edit().putBoolean("focusCounted", true).putInt("focusDone", focusDone() + 1).apply()
+        plant(focusMinutes().toString())
         return true
     }
 

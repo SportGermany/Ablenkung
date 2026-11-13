@@ -33,6 +33,25 @@ object Stats {
 
     fun badge(id: String) = BADGES.firstOrNull { it.id == id }
 
+    // ---------- Fokus-Wald ----------
+
+    /** Fertiger Baum je nach Fokus-Länge. "x" = abgebrochen. */
+    fun tree(token: String): String = when (token.toIntOrNull()) {
+        null -> "🥀"
+        in 0..29 -> "🌿"
+        in 30..49 -> "🌳"
+        in 50..74 -> "🌲"
+        else -> "🌴"
+    }
+
+    /** Baum, der gerade wächst (0.0 bis 1.0 geschafft). */
+    fun growing(progress: Float, minutes: Int): String = when {
+        progress < 0.25f -> "🌱"
+        progress < 0.5f -> "🌿"
+        progress < 0.75f -> "🪴"
+        else -> tree(minutes.toString())
+    }
+
     private fun dayStart(offsetDays: Int): Long = Calendar.getInstance().apply {
         add(Calendar.DAY_OF_YEAR, -offsetDays)
         set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
@@ -62,7 +81,7 @@ object Stats {
             val day = store.dayKey(off)
             if (!known(store, day)) break
             val m = store.minutes(day)
-            if (m < 0 || m > store.dailyGoal) break
+            if (m < 0 || m > store.goalFor(day)) break
             n++
         }
         return n
@@ -127,7 +146,8 @@ object Stats {
         val df = SimpleDateFormat("EE dd.MM.", Locale.GERMANY)
         val sb = StringBuilder()
         sb.appendLine("Meine Handybremse-Bilanz (letzte 7 Tage)")
-        sb.appendLine("Tagesziel: ${store.dailyGoal} Min · Limit: ${store.dailyLimit}× pro App · Nachtruhe: " +
+        sb.appendLine("Tagesziel: ${store.dailyGoal} Min · Limit: ${store.dailyLimit}× pro App" +
+            (if (store.weekendDifferent) " (Wochenende: ${store.weekendGoal} Min, ${store.weekendLimit}×)" else "") + " · Nachtruhe: " +
             if (store.nightOn) "${hhmm(store.nightFrom)}–${hhmm(store.nightTo)}" else "aus")
         sb.appendLine()
         for (off in 6 downTo 0) {

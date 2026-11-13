@@ -47,7 +47,7 @@ object Apps {
     /** Öffnet eine App: gebremste Apps zuerst über den Pause-Bildschirm. */
     fun open(context: Context, pkg: String) {
         val store = Store(context)
-        val whole = !store.isShortsOnly(pkg) || store.isNight() || store.focusActive()
+        val whole = !store.isShortsOnly(pkg) || store.hardLocked()
         if (pkg in store.blocked && whole && !store.sessionActive(pkg)) {
             PauseActivity.start(context, pkg, expired = false, shorts = false)
         } else launchDirect(context, pkg)
@@ -104,6 +104,9 @@ object Apps {
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         return pm.isIgnoringBatteryOptimizations(context.packageName)
     }
+
+    /** Minuten heute in einer einzelnen App (nur mit Nutzungszugriff). */
+    fun appMinutesToday(context: Context, pkg: String): Int? = minutesToday(context, setOf(pkg))
 
     /** Minuten heute in den gebremsten Apps (nur mit Nutzungszugriff). */
     fun minutesToday(context: Context, pkgs: Set<String>): Int? {

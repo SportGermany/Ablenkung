@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -182,7 +183,7 @@ class MainActivity : ComponentActivity() {
         val streak = Stats.streak(store)
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (Apps.hasUsageAccess(this@MainActivity) && minutes >= 0) GoalBar(minutes, store.dailyGoal)
+            if (Apps.hasUsageAccess(this@MainActivity) && minutes >= 0) GoalBar(minutes, store.goalFor())
             val parts = mutableListOf<String>()
             if (streak > 0) parts += "🔥 $streak ${if (streak == 1) "Tag" else "Tage"} unter Ziel"
             if (declined > 0) parts += "${declined}× umentschieden 🎉"
@@ -226,15 +227,21 @@ class MainActivity : ComponentActivity() {
         @Suppress("UNUSED_EXPRESSION") tick
         if (store.focusActive(now)) {
             val left = ((store.focusUntil() - now) / 1000).coerceAtLeast(0)
+            val total = store.focusMinutes() * 60f
+            val progress = (1f - left / total).coerceIn(0f, 1f)
             Card {
                 Text("🎯 Fokus", color = C.accent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text("%d:%02d".format(left / 60, left % 60), color = C.text, fontSize = 44.sp, fontWeight = FontWeight.Light)
-                Body("Alle gebremsten Apps sind bis zum Ende komplett zu.")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(Stats.growing(progress, store.focusMinutes()), fontSize = 56.sp)
+                    Spacer(Modifier.width(16.dp))
+                    Text("%d:%02d".format(left / 60, left % 60), color = C.text, fontSize = 44.sp, fontWeight = FontWeight.Light)
+                }
+                Body("Dein Baum wächst, solange du dranbleibst. Alle gebremsten Apps sind bis zum Ende komplett zu.")
                 if (!confirmCancel) {
                     Text("Fokus abbrechen", color = C.dim, fontSize = 14.sp,
                         modifier = Modifier.clickable { confirmCancel = true }.padding(vertical = 4.dp))
                 } else {
-                    Body("Wirklich abbrechen? Dann zählt dieser Fokus nicht.", C.warn)
+                    Body("Wirklich abbrechen? Dann welkt dein Baum 🥀 und der Fokus zählt nicht.", C.warn)
                     BigButton("Weitermachen 💪") { confirmCancel = false }
                     BigButton("Ja, abbrechen", primary = false) { store.cancelFocus(); confirmCancel = false; tick++ }
                 }
@@ -242,7 +249,7 @@ class MainActivity : ComponentActivity() {
         } else if (choosing) {
             Card {
                 Text("🎯 Wie lange Fokus?", color = C.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Body("In dieser Zeit sind alle gebremsten Apps komplett zu, auch Reels und Shorts.")
+                Body("In dieser Zeit sind alle gebremsten Apps komplett zu, auch Reels und Shorts. Dafür wächst ein Baum in deinem Wald: 25 Min 🌿 · 45 Min 🌳 · 60 Min 🌲 · 90 Min 🌴")
                 listOf(25, 45, 60, 90).forEach { m ->
                     BigButton("$m Minuten", primary = false) { store.startFocus(m); choosing = false; tick++ }
                 }
@@ -250,6 +257,9 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.clickable { choosing = false }.padding(vertical = 4.dp))
             }
         } else {
+            store.activeBlock(now)?.let { b ->
+                Text("⛔ Sperrzeit „${b.name}“ bis ${hhmm(b.to)} Uhr", color = C.warn, fontSize = 15.sp)
+            }
             Text("🎯 Fokus starten", color = C.accent, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable { choosing = true }.padding(vertical = 6.dp))
         }

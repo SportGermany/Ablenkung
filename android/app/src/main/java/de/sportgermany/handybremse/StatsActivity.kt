@@ -72,7 +72,7 @@ class StatsActivity : ComponentActivity() {
         }
         val week = Stats.week(store)
         val streak = Stats.streak(store)
-        val goal = store.dailyGoal
+        val goal = store.goalFor()
 
         Column(
             Modifier.fillMaxSize().background(C.bg).safeDrawingPadding()
@@ -142,6 +142,21 @@ class StatsActivity : ComponentActivity() {
                     }
                 }
                 Body("Umentschieden insgesamt: ${store.declinedTotal()}× · Fokus geschafft: ${store.focusDone()}×")
+            }
+
+            // Fokus-Wald
+            Card {
+                val trees = store.forest()
+                val alive = trees.count { it != "x" }
+                Text("🌳 Dein Fokus-Wald", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                if (trees.isEmpty()) Body("Noch leer. Starte auf dem Startbildschirm einen Fokus, dann wächst hier dein erster Baum.")
+                else {
+                    Body("$alive ${if (alive == 1) "Baum" else "Bäume"} gewachsen" +
+                        if (trees.size > alive) ", ${trees.size - alive} verwelkt" else "")
+                    trees.takeLast(80).chunked(8).forEach { row ->
+                        Text(row.joinToString(" ") { Stats.tree(it) }, fontSize = 26.sp, lineHeight = 34.sp)
+                    }
+                }
             }
 
             // Abzeichen

@@ -36,11 +36,13 @@ class PauseActivity : ComponentActivity() {
         private const val EXTRA_PKG = "pkg"
         private const val EXTRA_EXPIRED = "expired"
         private const val EXTRA_SHORTS = "shorts"
+        private const val EXTRA_RETURN = "returnPkg"
         const val PLANER_URL = "https://sportgermany.github.io/Schulplaner/"
 
-        fun start(context: Context, pkg: String, expired: Boolean, shorts: Boolean = false) {
+        fun start(context: Context, pkg: String, expired: Boolean, shorts: Boolean = false, returnPkg: String? = null) {
             context.startActivity(Intent(context, PauseActivity::class.java)
                 .putExtra(EXTRA_PKG, pkg)
+                .putExtra(EXTRA_RETURN, returnPkg)
                 .putExtra(EXTRA_EXPIRED, expired)
                 .putExtra(EXTRA_SHORTS, shorts)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
@@ -90,12 +92,13 @@ class PauseActivity : ComponentActivity() {
         val pkg = intent.getStringExtra(EXTRA_PKG) ?: run { finish(); return }
         val expired = intent.getBooleanExtra(EXTRA_EXPIRED, false)
         val shorts = intent.getBooleanExtra(EXTRA_SHORTS, false)
+        val returnPkg = intent.getStringExtra(EXTRA_RETURN)
         val store = Store(this)
         if (store.isNight()) store.addNightTry()
         val key = screenKey
         setContent {
             HbTheme {
-                androidx.compose.runtime.key(key) { PauseScreen(pkg, expired, shorts) }
+                androidx.compose.runtime.key(key) { PauseScreen(pkg, expired, shorts, returnPkg) }
             }
         }
     }
@@ -136,10 +139,19 @@ class PauseActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun PauseScreen(pkg: String, expired: Boolean, shorts: Boolean) {
+    private fun PauseScreen(pkg: String, expired: Boolean, shorts: Boolean, returnPkg: String?) {
         val store = remember { Store(this) }
         val appName = remember { Apps.label(this, pkg) }
-        val what = if (shorts) "${Shorts.name(pkg)} in $appName" else appName
+        val inBrowser = returnPkg != null
+        val what = (if (shorts) "${Shorts.name(pkg)} in $appName" else appName) + if (inBrowser) " im Browser" else ""
+        val appLimit = store.appLimit(pkg)
+        val usedMin = remember { if (appLimit > 0) Apps.appMinutesToday(this, pkg) else null }
+        val leftMin = if (appLimit > 0 && usedMin != null) (appLimit - usedMin).coerceAtLeast(0) else null
+        /** Nach der Entscheidung: zurück in die App bzw. den Browser. */
+        fun go() {
+            if (!Apps.launchDirect(this@PauseActivity, returnPkg ?: pkg)) Apps.goHome(this@PauseActivity)
+            finish()
+        }
         var intention by remember { mutableStateOf<String?>(null) }
 
         Column(
@@ -153,7 +165,7 @@ class PauseActivity : ComponentActivity() {
         ) {
             Spacer(Modifier.height(24.dp))
             val opens = store.opensToday(pkg)
-            val limit = store.dailyLimit
+            val limit = store.limitFor()
 
             when {
                 store.focusActive() -> {
@@ -162,6 +174,21 @@ class PauseActivity : ComponentActivity() {
                     Body("Noch $left Minuten. Bis dahin ist $appName zu. Du schaffst das!")
                     Alternatives(store, countAsDecline = false)
                     BigButton("Zurück zum Fokus") { leave() }
+                }
+
+                store.activeBlock() != null -> {
+                    val b = store.activeBlock()!!
+                    Title("⛔ Sperrzeit: ${b.name}")
+                    Body("$appName ist bis ${hhmm(b.to)} Uhr gesperrt. Konzentrier dich auf ${b.name}, danach geht es wieder.")
+                    Alternatives(store, countAsDecline = false)
+                    BigButton("Zum Startbildschirm") { leave() }
+                }
+
+                leftMin == 0 -> {
+                    Title("⌛ Deine $appLimit Minuten sind aufgebraucht")
+                    Body("Für $appName hast du dir $appLimit Minuten am Tag vorgenommen. Die sind für heute weg. Morgen gibt es neue.")
+                    Alternatives(store, countAsDecline = false)
+                    BigButton("Zum Startbildschirm") { leave() }
                 }
 
                 store.isNight() -> {
@@ -186,8 +213,7 @@ class PauseActivity : ComponentActivity() {
                         if (store.canExtend(pkg)) {
                             BigButton("+5 Minuten (nur einmal, zählt als Öffnung)", primary = false) {
                                 store.extend(pkg)
-                                if (!Apps.launchDirect(this@PauseActivity, pkg)) Apps.goHome(this@PauseActivity)
-                                finish()
+                                go()
                             }
                         }
                         Body("Sonst fängst du von vorne an:")
@@ -198,7 +224,8 @@ class PauseActivity : ComponentActivity() {
                     INTENTIONS.forEach { option ->
                         BigButton(option, primary = false) { intention = option }
                     }
-                    Body("Heute schon $opens von $limit Mal geöffnet.")
+                    Body("Heute schon $opens von $limit Mal geöffnet." +
+                        (leftMin?.let { " Noch $it von $appLimit Minuten übrig." } ?: ""))
                     Spacer(Modifier.height(8.dp))
                     BigButton("Doch nicht", primary = true) { decline() }
                 }
@@ -211,13 +238,14 @@ class PauseActivity : ComponentActivity() {
                     } else {
                         Body("„$intention“")
                     }
-                    listOf(5, 10, 15).forEach { min ->
+                    val choices = listOf(5, 10, 15).map { if (leftMin != null) minOf(it, leftMin) else it }.distinct()
+                    choices.forEach { min ->
                         BigButton("$min Minuten", primary = false) {
                             store.startSession(pkg, min, intention!!)
-                            if (!Apps.launchDirect(this@PauseActivity, pkg)) Apps.goHome(this@PauseActivity)
-                            finish()
+                            go()
                         }
                     }
+                    if (leftMin != null) Body("Du hast heute noch $leftMin Minuten für $appName.")
                     Body("Wenn die Zeit um ist, schließt die Handybremse $what. Danach kannst du einmal um 5 Minuten verlängern oder fängst von vorne an.")
                     Spacer(Modifier.height(8.dp))
                     BigButton("Doch nicht", primary = true) { decline() }
