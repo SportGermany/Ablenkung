@@ -11,7 +11,10 @@ import javax.crypto.spec.SecretKeySpec
  * Dasselbe rechnet ../../freigabe/code.py aus.
  */
 object Codes {
+    /** Einstellungen, nur solange man drin bleibt. */
     const val SETTINGS = 'E'
+    /** Einstellungen, 10 Minuten offen – auch zwischendurch auf dem Startbildschirm. Nutzt dieselbe Anfrage-Nummer wie E. */
+    const val SETTINGS_WINDOW = 'Z'
     const val UNINSTALL = 'D'
 
     private fun hexToBytes(hex: String) = ByteArray(hex.length / 2) {

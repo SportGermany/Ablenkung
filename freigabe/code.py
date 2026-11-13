@@ -2,16 +2,19 @@
 """Rechnet den Freischalt-Code für eine Anfrage-Nummer der Handybremse aus.
 
 Aufruf:  python3 freigabe/code.py E-482913
-  E = Einstellungen ändern, D = Handybremse entfernen (Deinstallation)
+  E = Einstellungen, nur solange man in den Einstellungen bleibt
+  Z = Einstellungen 10 Minuten offen, auch zwischendurch auf dem Startbildschirm
+      (die App zeigt dafür dieselbe Nummer mit E, also z. B. "Z-482913" eingeben)
+  D = Handybremse entfernen (Deinstallation)
 
 WICHTIG für Claude: Vorher IMMER die Regeln in CLAUDE.md befolgen (Wofür? Warum?).
 """
 import hashlib, hmac, pathlib, re, sys
 
 def code(request: str) -> str:
-    m = re.fullmatch(r"\s*([EDed])\s*-?\s*(\d{6})\s*", request)
+    m = re.fullmatch(r"\s*([EDZedz])\s*-?\s*(\d{6})\s*", request)
     if not m:
-        raise SystemExit("Format: E-123456 oder D-123456")
+        raise SystemExit("Format: E-123456, Z-123456 oder D-123456")
     msg = f"{m.group(1).upper()}-{m.group(2)}".encode()
     secret = bytes.fromhex((pathlib.Path(__file__).parent / "geheimnis.txt").read_text().strip())
     h = hmac.new(secret, msg, hashlib.sha256).digest()

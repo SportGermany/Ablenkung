@@ -23,8 +23,6 @@ class Store(context: Context) {
         )
         const val SETTINGS_MINUTES = 10
         const val UNINSTALL_MINUTES = 15
-        const val MAX_FAILED = 5
-        const val FAILED_LOCK_MINUTES = 15
         const val MAX_FAVORITES = 8
     }
 
@@ -113,8 +111,17 @@ class Store(context: Context) {
 
     fun settingsUnlocked(now: Long = System.currentTimeMillis()) = p.getLong("settingsUntil", 0) > now
     fun settingsUntil() = p.getLong("settingsUntil", 0)
-    fun unlockSettings(minutes: Int = SETTINGS_MINUTES) =
-        p.edit().putLong("settingsUntil", System.currentTimeMillis() + minutes * 60_000L).apply()
+    /**
+     * sticky = true: offen für [minutes], auch wenn man zwischendurch auf den Startbildschirm geht.
+     * sticky = false: offen nur, solange man in den Einstellungen bleibt (beim Verlassen wird gesperrt).
+     */
+    fun unlockSettings(minutes: Int = SETTINGS_MINUTES, sticky: Boolean = true) =
+        p.edit().putLong("settingsUntil", System.currentTimeMillis() + minutes * 60_000L)
+            .putBoolean("settingsSticky", sticky).apply()
+
+    fun settingsSticky() = p.getBoolean("settingsSticky", true)
+
+    fun lockSettings() = p.edit().putLong("settingsUntil", 0).apply()
 
     fun uninstallUnlocked(now: Long = System.currentTimeMillis()) = p.getLong("uninstallUntil", 0) > now
     fun unlockUninstall(minutes: Int = UNINSTALL_MINUTES) =
@@ -140,16 +147,4 @@ class Store(context: Context) {
 
     fun renewChallenge(action: Char) = p.edit().remove("challenge_$action").apply()
 
-    fun lockedOutUntil() = p.getLong("lockedUntil", 0)
-
-    fun registerFailure() {
-        val f = p.getInt("failed", 0) + 1
-        if (f >= MAX_FAILED) {
-            p.edit().putInt("failed", 0)
-                .putLong("lockedUntil", System.currentTimeMillis() + FAILED_LOCK_MINUTES * 60_000L).apply()
-        } else p.edit().putInt("failed", f).apply()
-    }
-
-    fun failuresLeft() = MAX_FAILED - p.getInt("failed", 0)
-    fun resetFailures() = p.edit().putInt("failed", 0).apply()
 }

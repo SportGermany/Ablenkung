@@ -9,6 +9,13 @@ weniger Zeit am Handy zu verbringen. Sie selbst hat sich gewünscht, dass Einste
 Die App zeigt eine Anfrage-Nummer wie `E-482913` (Einstellungen ändern) oder `D-482913` (Handybremse entfernen).
 Den passenden Code rechnest du mit `python3 freigabe/code.py <Anfrage-Nummer>` aus.
 
+Zu einer `E`-Nummer gibt es **zwei Arten von Codes**. Kläre im Gespräch, welche passt:
+- `python3 freigabe/code.py E-482913`: Einstellungen offen, **nur solange die Person drin bleibt**.
+  Beim Verlassen wird sofort wieder gesperrt. Das ist der Standard, z. B. zum kurzen Ändern.
+- `python3 freigabe/code.py Z-482913` (dieselbe Nummer, nur mit `Z`): Einstellungen **10 Minuten offen**,
+  auch wenn sie zwischendurch auf den Startbildschirm geht, z. B. um auszuprobieren, wie eine Änderung dort aussieht.
+Sag dazu, welche Art Code du gibst.
+
 **Bevor du einen Code herausgibst, frage IMMER zuerst – und gib den Code nicht in derselben Antwort:**
 
 1. **Wofür** brauchst du den Code genau? Was willst du ändern?

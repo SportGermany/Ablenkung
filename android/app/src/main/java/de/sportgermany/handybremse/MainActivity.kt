@@ -36,7 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.produceState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,9 +75,19 @@ class MainActivity : ComponentActivity() {
         var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
         LaunchedEffect(Unit) { while (true) { delay(15_000); now = System.currentTimeMillis() } }
 
-        if (store.favorites == null) store.favorites = Apps.defaultFavorites(this)
-        val apps = remember(resumeTick) { Apps.all(this, refresh = true) }
-        val favorites = (store.favorites ?: emptyList()).filter { f -> apps.any { it.pkg == f } }
+        var apps by remember { mutableStateOf(Apps.cached() ?: emptyList()) }
+        var favList by remember { mutableStateOf(store.favorites ?: emptyList()) }
+        LaunchedEffect(resumeTick) {
+            // App-Liste im Hintergrund laden, damit der Startbildschirm sofort erscheint
+            apps = withContext(Dispatchers.Default) {
+                Apps.all(this@MainActivity, refresh = true).also {
+                    if (store.favorites == null) store.favorites = Apps.defaultFavorites(this@MainActivity)
+                }
+            }
+            favList = store.favorites ?: emptyList()
+        }
+        val labels = remember(apps) { apps.associate { it.pkg to it.label } }
+        val favorites = favList.filter { it in labels }
         val blocked = store.blocked
 
         Column(
@@ -100,7 +113,7 @@ class MainActivity : ComponentActivity() {
 
             if (query.isBlank()) {
                 favorites.forEach { pkg ->
-                    AppRow(apps.first { it.pkg == pkg }.label, pkg in blocked) { Apps.open(this@MainActivity, pkg) }
+                    AppRow(labels.getValue(pkg), pkg in blocked) { Apps.open(this@MainActivity, pkg) }
                 }
             }
 
@@ -122,7 +135,10 @@ class MainActivity : ComponentActivity() {
             }
 
             Spacer(Modifier.height(32.dp))
-            Text("🔒 Einstellungen", color = C.dim, fontSize = 15.sp,
+            val open = store.settingsUnlocked(now)
+            val openText = if (!open) "🔒 Einstellungen"
+                else "🔓 Einstellungen – noch offen bis " + SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(store.settingsUntil()))
+            Text(openText, color = if (open) C.warn else C.dim, fontSize = 15.sp,
                 modifier = Modifier.clickable {
                     if (store.settingsUnlocked()) startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
                     else LockActivity.start(this@MainActivity)
@@ -133,7 +149,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun StatsLine(store: Store, blocked: Set<String>) {
         val declined = store.declinedToday()
-        val minutes = Apps.minutesToday(this, blocked)
+        val minutes by produceState<Int?>(initialValue = null, resumeTick) {
+            value = withContext(Dispatchers.Default) { Apps.minutesToday(this@MainActivity, blocked) }
+        }
         val parts = mutableListOf<String>()
         if (declined > 0) parts += "Heute ${declined}× umentschieden 🎉"
         if (minutes != null) parts += "Ablenkungs-Apps: $minutes Min"

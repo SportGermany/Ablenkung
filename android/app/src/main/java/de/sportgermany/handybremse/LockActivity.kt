@@ -92,19 +92,16 @@ class LockActivity : ComponentActivity() {
         val message = intent.getStringExtra(EXTRA_MSG)
         var feedback by remember { mutableStateOf<String?>(null) }
         var emergencyDone by remember { mutableStateOf(false) }
-        val lockedUntil = store.lockedOutUntil()
-        val locked = lockedUntil > System.currentTimeMillis()
+        val locked = false   // keine Sperre nach Falschversuchen
 
         fun tryCode(action: Char, input: String): Boolean {
-            if (store.lockedOutUntil() > System.currentTimeMillis()) return false
-            val ok = Codes.check(action, store.challenge(action), input)
+            val ok = Codes.check(action, store.challenge(action), input) ||
+                (action == Codes.SETTINGS && Codes.check(Codes.SETTINGS_WINDOW, store.challenge(action), input))
             if (ok) {
-                store.resetFailures()
                 store.renewChallenge(action)
+                feedback = null
             } else {
-                store.registerFailure()
-                feedback = "Der Code stimmt nicht. Noch ${store.failuresLeft()} Versuche, dann ist 15 Minuten Pause."
-                refresh++
+                feedback = "Der Code passt nicht zu ${action}-${store.challenge(action)}. Prüf, ob du ihn im richtigen Feld eingegeben hast. Du kannst es einfach nochmal versuchen."
             }
             return ok
         }
@@ -124,9 +121,6 @@ class LockActivity : ComponentActivity() {
             message?.let { Body(it, C.warn) }
             Body("Schick die Anfrage-Nummer an Claude. Claude fragt dich, wofür und warum, und gibt dir dann einen Code.")
             feedback?.let { Body(it, C.bad) }
-            if (locked) {
-                Body("Zu viele falsche Versuche. Warte bis ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.GERMANY).format(java.util.Date(lockedUntil))} Uhr.", C.bad)
-            }
 
             if (emergencyDone) {
                 Card {
@@ -141,13 +135,15 @@ class LockActivity : ComponentActivity() {
 
             ActionCard(
                 title = "Einstellungen ändern",
-                hint = "Öffnet die Einstellungen für ${Store.SETTINGS_MINUTES} Minuten.",
+                hint = "Claude gibt dir einen von zwei Codes: Einer öffnet die Einstellungen, solange du drin bleibst. Der andere lässt sie ${Store.SETTINGS_MINUTES} Minuten offen, auch wenn du zwischendurch auf den Startbildschirm gehst.",
                 action = Codes.SETTINGS,
                 store = store,
                 enabled = !locked,
             ) { input ->
+                val window = Codes.check(Codes.SETTINGS_WINDOW, store.challenge(Codes.SETTINGS), input)
                 if (tryCode(Codes.SETTINGS, input)) {
-                    store.unlockSettings()
+                    if (window) store.unlockSettings(Store.SETTINGS_MINUTES, sticky = true)
+                    else store.unlockSettings(30, sticky = false)
                     startActivity(Intent(this@LockActivity, SettingsActivity::class.java))
                     finish()
                 }
@@ -180,16 +176,13 @@ class LockActivity : ComponentActivity() {
                 )
                 BigButton("Notfall-Code prüfen", primary = false, enabled = !locked && input.isNotBlank()) {
                     if (Codes.isEmergency(input)) {
-                        store.resetFailures()
-                        store.unlockSettings(30)
+                        store.unlockSettings(30, sticky = true)
                         store.unlockUninstall(30)
                         emergencyDone = true
                         feedback = null
                         input = ""
                     } else {
-                        store.registerFailure()
-                        feedback = "Der Notfall-Code stimmt nicht. Noch ${store.failuresLeft()} Versuche."
-                        refresh++
+                        feedback = "Der Notfall-Code stimmt nicht. Prüf ihn in deinen Notizen und versuch es nochmal."
                     }
                 }
             }

@@ -15,6 +15,8 @@ data class AppInfo(val pkg: String, val label: String)
 object Apps {
     @Volatile private var cache: List<AppInfo>? = null
 
+    fun cached(): List<AppInfo>? = cache
+
     fun all(context: Context, refresh: Boolean = false): List<AppInfo> {
         if (!refresh) cache?.let { return it }
         val pm = context.packageManager

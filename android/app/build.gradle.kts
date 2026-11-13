@@ -15,8 +15,8 @@ android {
         applicationId = "de.sportgermany.handybremse"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
         buildConfigField("String", "FREIGABE_SECRET", "\"$freigabeSecret\"")
         // Notfall-Code: hier liegt nur ein Abdruck (SHA-256 mit Salz), nie der Code selbst
         buildConfigField("String", "NOTFALL_SALT", "\"c1a2c92d1891bb4f8b242533a4215ed7\"")
@@ -67,4 +67,5 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 }
