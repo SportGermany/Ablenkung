@@ -147,6 +147,10 @@ class MainActivity : ComponentActivity() {
             Text("📊 Statistik & Abzeichen", color = C.dim, fontSize = 15.sp,
                 modifier = Modifier.clickable { startActivity(Intent(this@MainActivity, StatsActivity::class.java)) }
                     .padding(vertical = 8.dp))
+            Text("🛠 Hilfe & Reparatur" + if (HbApp.lastCrash(this@MainActivity) != null) " – Fehlerbericht da" else "",
+                color = C.dim, fontSize = 15.sp,
+                modifier = Modifier.clickable { startActivity(Intent(this@MainActivity, RepairActivity::class.java)) }
+                    .padding(vertical = 8.dp))
             val open = store.settingsUnlocked(now)
             val openText = if (!open) "🔒 Einstellungen"
                 else "🔓 Einstellungen – noch offen bis " + SimpleDateFormat("HH:mm", Locale.GERMANY).format(Date(store.settingsUntil()))
